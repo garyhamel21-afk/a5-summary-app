@@ -34,24 +34,66 @@ def _clean(t):
     ).strip()
 
 def _get_fonts():
+    """한국어 지원 폰트 탐색. (regular_path, bold_path, name, subfontIndex) 순서로 시도."""
     if _FONT_CACHE:
         return _FONT_CACHE["fn"], _FONT_CACHE["fb"]
+
     candidates = [
-        ("C:/Windows/Fonts/malgun.ttf",   "Malgun"),
-        ("C:/Windows/Fonts/NanumGothic.ttf", "Nanum"),
+        # ── Linux (Railway/Docker) ──
+        # Nanum Gothic — TTF, 가장 간단
+        ("/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+         "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",
+         "NanumGothic", None),
+        # Noto Sans CJK — TTC 컬렉션, Korean = subfontIndex 1
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+         "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+         "NotoSansKR", 1),
+        ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+         "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+         "NotoSansKR", 1),
+        # ── macOS ──
+        ("/System/Library/Fonts/AppleSDGothicNeo.ttc",
+         "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+         "AppleSDGothic", 0),
+        # ── Windows (로컬 개발) ──
+        ("C:/Windows/Fonts/malgun.ttf",
+         "C:/Windows/Fonts/malgunbd.ttf",
+         "Malgun", None),
+        ("C:/Windows/Fonts/NanumGothic.ttf",
+         "C:/Windows/Fonts/NanumGothicBold.ttf",
+         "Nanum", None),
     ]
-    fn = "Helvetica"
-    for path, name in candidates:
-        if os.path.exists(path):
-            try:
-                pdfmetrics.registerFont(TTFont(name, path))
-                fn = name
-                break
-            except Exception:
-                pass
+
+    fn, fb = "Helvetica", "Helvetica-Bold"
+    for reg, bold, name, idx in candidates:
+        if not os.path.exists(reg):
+            continue
+        try:
+            if idx is not None:
+                pdfmetrics.registerFont(TTFont(name, reg, subfontIndex=idx))
+            else:
+                pdfmetrics.registerFont(TTFont(name, reg))
+            fn = name
+            # 볼드 폰트도 등록 시도 (실패하면 regular로 폴백)
+            if bold and os.path.exists(bold):
+                try:
+                    bold_name = name + "-Bold"
+                    if idx is not None:
+                        pdfmetrics.registerFont(TTFont(bold_name, bold, subfontIndex=idx))
+                    else:
+                        pdfmetrics.registerFont(TTFont(bold_name, bold))
+                    fb = bold_name
+                except Exception:
+                    fb = name
+            else:
+                fb = name
+            break
+        except Exception:
+            continue
+
     _FONT_CACHE["fn"] = fn
-    _FONT_CACHE["fb"] = fn   # bold fallback = same font
-    return fn, fn
+    _FONT_CACHE["fb"] = fb
+    return fn, fb
 
 
 def _wrap(c, text, x, y, w, fn, sz, col, lh=None, max_lines=None):

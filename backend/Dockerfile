@@ -3,6 +3,7 @@ FROM python:3.11-slim
 # 한국어 폰트 (ReportLab용)
 RUN apt-get update && apt-get install -y \
     fonts-noto-cjk \
+    fonts-nanum \
     fontconfig \
     && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
