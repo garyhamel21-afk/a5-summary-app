@@ -1,4 +1,4 @@
-﻿import re, io
+﻿import os, re, io
 from fastapi import UploadFile, HTTPException
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
 from pypdf import PdfReader
@@ -10,10 +10,21 @@ def _extract_video_id(url):
         if m: return m.group(1)
     raise HTTPException(status_code=400, detail="유효하지 않은 YouTube URL입니다.")
 
+def _build_api():
+    """Webshare 프록시 환경변수가 있으면 프록시 통해서, 없으면 직접 호출."""
+    pu = os.environ.get("WEBSHARE_PROXY_USERNAME")
+    pp = os.environ.get("WEBSHARE_PROXY_PASSWORD")
+    if pu and pp:
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+        return YouTubeTranscriptApi(
+            proxy_config=WebshareProxyConfig(proxy_username=pu, proxy_password=pp)
+        )
+    return YouTubeTranscriptApi()
+
 async def extract_from_youtube(url):
     vid = _extract_video_id(url)
     try:
-        api = YouTubeTranscriptApi()
+        api = _build_api()
         tl = api.list(vid)
         try:
             t = tl.find_transcript(["ko", "en"])
