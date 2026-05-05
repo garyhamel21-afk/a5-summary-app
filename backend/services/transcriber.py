@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 from groq import AsyncGroq
 
-SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".webm", ".flac", ".mp4"}
+SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".webm", ".flac", ".mp4", ".aac"}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 # Whisper 언어 코드 매핑 (ISO 639-1)
@@ -84,4 +84,5 @@ def _mime_type(ext: str) -> str:
         ".webm": "audio/webm",
         ".flac": "audio/flac",
         ".mp4": "audio/mp4",
+        ".aac": "audio/aac",
     }.get(ext, "audio/mpeg")
