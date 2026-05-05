@@ -1,46 +1,53 @@
 import os
 import tempfile
 from pathlib import Path
-from openai import AsyncOpenAI
+from groq import AsyncGroq
 
 SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".webm", ".flac", ".mp4"}
-MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB (OpenAI Whisper 제한)
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
+# Whisper 언어 코드 매핑 (ISO 639-1)
 LANG_MAP = {
     "ko": "ko",
     "en": "en",
     "ja": "ja",
     "zh": "zh",
-    "auto": None,
+    "auto": None,  # None → 자동 감지
 }
 
 
 async def transcribe_audio(file_bytes: bytes, filename: str, language: str = "ko") -> str:
-    """오디오 파일을 텍스트로 변환합니다 (OpenAI Whisper API).
-    환경변수 OPENAI_API_KEY 필요.
     """
-    api_key = os.environ.get("OPENAI_API_KEY")
+    오디오 파일을 받아 텍스트로 변환합니다 (Groq Whisper API 사용).
+    환경변수 GROQ_API_KEY 필요.
+    """
+    api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         raise ValueError(
-            "OPENAI_API_KEY 환경변수가 설정되지 않았습니다. "
+            "GROQ_API_KEY 환경변수가 설정되지 않았습니다. "
             "Railway 대시보드에서 환경변수를 추가해 주세요."
         )
 
+    # 파일 확장자 검사
     ext = Path(filename).suffix.lower()
     if not ext:
-        ext = ".mp3"
+        ext = ".mp3"  # 기본값
     if ext not in SUPPORTED_EXTENSIONS:
         raise ValueError(
             f"지원하지 않는 파일 형식입니다 ({ext}). "
             f"지원 형식: {', '.join(SUPPORTED_EXTENSIONS)}"
         )
 
+    # 파일 크기 검사
     if len(file_bytes) > MAX_FILE_SIZE:
-        raise ValueError("파일 크기가 너무 큽니다. (최대 25MB)")
+        raise ValueError(f"파일 크기가 너무 큽니다. (최대 25MB)")
 
+    # 언어 코드 변환
     whisper_lang = LANG_MAP.get(language, None)
-    client = AsyncOpenAI(api_key=api_key)
 
+    client = AsyncGroq(api_key=api_key)
+
+    # 임시 파일로 저장 후 Whisper API 호출
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
@@ -48,14 +55,18 @@ async def transcribe_audio(file_bytes: bytes, filename: str, language: str = "ko
     try:
         with open(tmp_path, "rb") as audio_file:
             kwargs = {
-                "model": "whisper-1",
+                "model": "whisper-large-v3-turbo",
                 "file": (filename, audio_file, _mime_type(ext)),
                 "response_format": "text",
             }
             if whisper_lang:
                 kwargs["language"] = whisper_lang
+
             transcript = await client.audio.transcriptions.create(**kwargs)
+
+        # response_format="text" 이면 문자열 바로 반환
         return transcript if isinstance(transcript, str) else transcript.text
+
     finally:
         try:
             os.unlink(tmp_path)
@@ -64,6 +75,7 @@ async def transcribe_audio(file_bytes: bytes, filename: str, language: str = "ko
 
 
 def _mime_type(ext: str) -> str:
+    """확장자 → MIME 타입 매핑"""
     return {
         ".mp3": "audio/mpeg",
         ".wav": "audio/wav",
