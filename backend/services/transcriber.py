@@ -1,8 +1,8 @@
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 from groq import AsyncGroq
-from pydub import AudioSegment
 
 SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".webm", ".flac", ".mp4", ".aac"}
 # Groq가 직접 지원하는 포맷
@@ -82,7 +82,7 @@ async def transcribe_audio(file_bytes: bytes, filename: str, language: str = "ko
 
 
 def _convert_to_mp3(file_bytes: bytes, ext: str) -> tuple:
-    """AAC 등 미지원 포맷을 MP3로 변환합니다."""
+    """AAC 등 미지원 포맷을 ffmpeg로 MP3 변환합니다."""
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_in:
         tmp_in.write(file_bytes)
         tmp_in_path = tmp_in.name
@@ -90,11 +90,37 @@ def _convert_to_mp3(file_bytes: bytes, ext: str) -> tuple:
     tmp_out_path = tmp_in_path.replace(ext, ".mp3")
 
     try:
-        audio = AudioSegment.from_file(tmp_in_path, format=ext.lstrip("."))
-        audio.export(tmp_out_path, format="mp3")
+        cmd = [
+            "ffmpeg", "-y",
+            "-analyzeduration", "100M",
+            "-probesize", "100M",
+        ]
+        # AAC는 ADTS 포맷으로 강제 지정
+        if ext == ".aac":
+            cmd += ["-f", "adts"]
+        cmd += [
+            "-i", tmp_in_path,
+            "-vn",
+            "-acodec", "libmp3lame",
+            "-q:a", "2",
+            tmp_out_path
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=120
+        )
+
+        if result.returncode != 0:
+            raise ValueError(
+                f"오디오 변환 실패: {result.stderr.decode(errors='replace')[-300:]}"
+            )
+
         with open(tmp_out_path, "rb") as f:
             mp3_bytes = f.read()
         return mp3_bytes, "converted.mp3", ".mp3"
+
     finally:
         try:
             os.unlink(tmp_in_path)
