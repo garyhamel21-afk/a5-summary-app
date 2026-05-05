@@ -1,11 +1,37 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from typing import Optional
 from services.extractor import extract_from_youtube, extract_from_file
 from services.claude_service import summarize_to_infographic
 from services.renderer import render_pdf, render_docx
+from services.transcriber import transcribe_audio
 
 router = APIRouter()
+
+
+@router.post("/transcribe")
+async def transcribe(
+    audio_file: UploadFile = File(...),
+    language: str = Form("ko"),
+):
+    """오디오 파일을 텍스트로 변환합니다 (OpenAI Whisper)."""
+    file_bytes = await audio_file.read()
+    filename = audio_file.filename or "audio.mp3"
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="오디오 파일이 비어 있습니다.")
+
+    try:
+        text = await transcribe_audio(file_bytes, filename, language=language)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"음성 인식 중 오류가 발생했습니다: {str(e)}")
+
+    if not text or not text.strip():
+        raise HTTPException(status_code=422, detail="음성에서 텍스트를 인식하지 못했습니다. 다른 파일을 시도해 주세요.")
+
+    return JSONResponse({"text": text.strip()})
 
 
 @router.post("/generate")
